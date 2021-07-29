@@ -8,6 +8,7 @@ from shutil import copy2
 from django.utils import translation
 from django.conf import settings
 from django.conf.urls import include as include_urls
+from django.core.cache import cache
 from django.http import HttpResponse
 from django.template.response import SimpleTemplateResponse
 from django.test import RequestFactory
@@ -106,12 +107,18 @@ class DistillRender(object):
 
     def render(self):
         for url, distill_func, file_name, status_codes, view_name, a, k in self.urls_to_distill:
-            for param_set in self.get_uri_values(distill_func, view_name):
+            param_set = getattr(url, "param_set", None)
+            if param_set is not None:
+                param_sets = [param_set]
+            else:
+                param_sets = self.get_uri_values(distill_func, view_name)
+            for param_set in param_sets:
                 if not param_set:
                     param_set = ()
                 elif self._is_str(param_set):
                     param_set = param_set,
                 uri = self.generate_uri(url, view_name, param_set)
+                cache.set("distill-%s" % uri, param_set)
                 render = self.render_view(uri, status_codes, param_set, a)
                 # rewrite URIs ending with a slash to ../index.html
                 if file_name is None and uri.endswith('/'):
